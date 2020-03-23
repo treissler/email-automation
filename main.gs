@@ -1,172 +1,200 @@
-/* Функция работает раз в день по триггеру. Рассылается прайс из папки Прайс.*/
-var err = "";
-var days = ["вс", "пн","вт","ср","чт", "пт", "сб"];
+/* Работает 1 раз в день по внешнему триггеру на main(). Рассылается файл прайс-листа с сайта. */
 
-function getPriceFile2 () {
-  //получить имя ссылки
-  var response = UrlFetchApp.fetch("http://obxt.ru/").getContentText(); 
-  response = response.match(/media\/price\/[^"]*/); log(response);
-  
-  //проверка корректности
-  if((!response)||(response[0].search("obht") < 0)){ 
-    err = err.concat("Ошибка получения прайса"); 
-    log(err); 
-    return 0; 
+function downloadFile () {
+  try{
+    log("Загрузка страницы " + filePageUrl);
+    var response = UrlFetchApp.fetch(filePageUrl).getContentText(); //null или string[]
+  } catch (e) {
+    errors += "Ошибка загрузки страницы."; 
+    return null;
   }
   
-  response = UrlFetchApp.fetch("https://obxt.ru/".concat(response)).getBlob();
-  return response;
-}
-
-function sendSelectedEmails() {
-  //номер листа = день недели
-
-  var td = new Date();
-  td = td.getDay();
+  var fileName = response.match(/media\/price\/[^"]*/); //null или string[]  
   
-  //в пт, сб, вс не рассылаем
-  if ((td == 0) || (td > 5)) { return 0; } //TODO в пятницу и пн не рассылаем
-  
-  //Где расположена база клиентов
-  var base_sheet_name = days[td];
-  
-  //Настройки
-  var settings = SpreadsheetApp.getActive().getSheetByName("Настройки");
-  var adminMail = settings.getRange("B1").getValue();
-  var adminName = settings.getRange("B2").getValue();
-  var subject = settings.getRange("B3").getValue();
-  
-  //Получение файла
-  var file = getPriceFile2(); //TODO предупредить если файл старый > 6 дней
-  
-  //Получение адресов клиентов
-  var sheet = SpreadsheetApp.getActive().getSheetByName(base_sheet_name);
-  var activeRange = sheet.getDataRange();
-  var data = activeRange.getValues();
-  var res = [];
-  var count = 0;
-  
-  for (var i=2; i< data.length; i++) {
-    var row = data[i];
-    
-    //Получение адреса
-    var emailClient = row[0];
-    
-    //Получение сообщения
-    var nameClient = row[2];
-    var message_type = row[1];
-    var message = getMessage(nameClient, message_type);
-    
-    //Отправка сообщения
-    if ((emailClient)&&(file)&&(message)&&(subject)&&(adminName)&&(adminMail)) {
-      if (i == 2) {
-        //Уведомление о начале рассылки
-        
-        GmailApp.sendEmail(adminMail, "Начата рассылка gmail", "Сегодня рассылается лист " + td + " \nКаждый день рассылку с прайсом получает небольшая часть базы клиентов, база разбита по дням недели. Рассылки нет в пн, пт, сб, вс. Прайс скачивается с сайта obxt. Подробнее в файле: https://docs.google.com/spreadsheets/d/1NkEf2cdD5vhYZyokRKQUSqYZC2j3xKvtH3jfyRe-a_w/edit?usp=sharing , файл доступен после авторизации в почте gmail. Данные для авторизации можно запросить по почте", 
-                           { name: adminName,
-                           replyTo: adminMail,
-                           attachments: [file], });
-      }
-      
-      GmailApp.sendEmail(emailClient, subject, message, {
-        name: adminName,
-        replyTo: adminMail,
-        attachments: [file],
-      });
-      row[4] = new Date();
-      count++;
-      
-    } else { 
-      row[4] = "ОШИБКА";
-      err = err.concat ("Что-то не так: ").concat("emailClient ").concat(emailClient).concat(" file ").concat(file).concat(" message ").concat(message).concat(" subject ").concat(subject).concat(" adminName ").concat(adminName).concat(" adminMail ").concat(adminMail);
-    }
-    res.push([row[4]]);
-  }
-  sheet.getRange(3, 5, data.length - 2, 1).setValues(res);
-  
-  GmailApp.sendEmail(adminMail, "Закончена рассылка gmail", "Успешно выслано " + count + " писем из " + (data.length - 2 ) + " Ошибки: " + err, 
-                     { name: adminName,
-                       replyTo: adminMail });
-
-}
-
-function log(t){
-  return Logger.log(t); 
-}
-
-function getMessage (nameClient, message_type) {  
-  //Настройки
-  var settings = SpreadsheetApp.getActive().getSheetByName("Настройки");
-  var data = settings.getDataRange().getValues();
-  var message_foot = data[8][1];
-  var message = data[4][1];
-  if (!nameClient) { 
-    nameClient =  data[3][1]; 
+  if((!fileName)||(fileName[0].search("obht") < 0)){ 
+    errors += "\nФайл не найден на странице. Ожидается имя вида /media/price/obht_price_2020-12-31(1).xls"; 
+    return null; 
   }
   
-  for (var i = 3; i<8; i++) {
-    if (message_type == data[i][0]) {
-      message = data[i][1];
-    }
-  }
-  return nameClient + message + message_foot;
+  var file = UrlFetchApp.fetch(filePageUrl + fileName).getBlob();
+  errors += "\nФайл успешно загружен.";
+  
+  return file;
 }
 
-function  getPriceFile () {
-  var files = DriveApp.getFoldersByName("Прайс").next().getFiles();
+//TODO включить если сайт недоступен, запросить файл у менеджера
+function  getFile () {
+  var files = DriveApp.getFoldersByName(fileFolderName).next().getFiles();
   
   if(files.hasNext()) { 
     return files.next();
   } else { 
-    Logger.log("no file"); 
-    return false; 
+    log("Ошибка: в папке на Диске не найден файл для рассылки."); 
+    return null; 
   };
 }
-/* Меню ****************************************/
-function menu() 
-{
-  var ss = SpreadsheetApp.getActive();
-  var entries = [ {name: "Отправить рассылку", functionName: "sendSelectedEmails"}];
-  ss.addMenu("БАЗА ХОЗТОРГА", entries);
-  Logger.log("OK");
-}
 
-function onOpen (e){
-  menu();
-}
-
-function isUnique() {
+function setColumns(tableHeader){
+  var colName = {
+    "Email(*)": "email",
+    "Шаблон письма(*)": "template", 
+    "Обращение": "recipientName", 
+    "Название компании": "company",
+    "Дата отправки": "dateSent",
+    "Комментарии для менеджера" : "comment"
+  };
   
-  var res = [];
-  for (var i = 0; i<days.length; i++) {
-    var ss;
-    try { ss = SpreadsheetApp.getActive().getSheetByName(days[i]);} catch (err){}
-    if (ss) {  
-      var data = ss.getRange("A3:A").getValues();
-      for (var i = 0; i< data.length; i++) {
-        if (data[i][0]) {
-        res.push(data[i][0]);
-        }
-      }
+  for (var i=0; i<tableHeader.length; i++){
+    if (!colName[tableHeader[i]]){ 
+      errors += "\nПроверьте, что все нужные колонки есть на листе: " + Object.keys(colName);
+      return false;
     }
+    colPosition[colName[tableHeader[i]]] = i;
   }
-  var l1 = res.length;
-  res = res.unique();
-  var l2 = res.length;
-  log(l1 + " "+ l2) ;
+  return true;
 }
 
-///////////////////////////////////////////////////////////
-Array.prototype.unique = function() 
-{
-  var n = {},r=[];
-  for(var i = 0; i < this.length; i++) 
-  {
-    if (!n[this[i]]) 
-    {
-      n[this[i]] = true; 
-      r.push(this[i]); 
+function getUserSettings () {  
+  var userSettings = ss.getSheetByName("Настройки").getDataRange().getValues();
+  
+  var fieldsName = {
+    "Email компании (replyTo)": "robotEmail",
+    "Название почтового робота": "robotName",
+    "Заголовок письма": "subject", 
+    "Обращение по умолчанию": "defaultName", 
+    "Текст1": "template1",
+    "Текст2": "template2",
+    "Подпись к письму": "footer"
+  };  
+  
+  var fields = {};
+  for (var i=0; i<userSettings.length; i++) {
+    var name = userSettings[i][0];
+    var val = userSettings[i][1];
+    fields[fieldsName[name]] = val;             
+  }
+  return fields;
+}
+
+function getMessageBody (recipientName, messageType, settings) {  log(recipientName + "name");
+  if (!recipientName) { 
+    recipientName = settings.defaultName; 
+  }
+  return recipientName + settings["template" + messageType] + settings.footer;
+}
+
+function getNotificationMessage(todaySheetName, sentCount, recipientsCount) {
+  var messages = {
+    mailing_start: {
+      header: "Начата рассылка прайс-листа",
+      body: "Сегодня получатели рассылки находятся на листе " 
+      + todaySheetName
+      + ".\nКаждый день рассылку с прайс-листом получает небольшая группа клиентов, база распределена по дням недели."
+      + "\nРассылки нет в пт, сб, вс."
+      + "\nПрайс-лист скачивается с сайта obxt.ru."
+      + "\nВопросы администратору рассылки: " 
+      + adminEmail, 
+    },
+    mailing_end:  {
+      header: "Закончена рассылка прайс-листа",
+      body:"Успешно выслано " + sentCount + " писем из " + recipientsCount + "\n\nЗамечания: " + errors      
+    },
+    error:  {
+      header: "Неудачная попытка рассылки прайс-листа",
+      body:"Рассылка не начата. Ошибки: " + errors      
     }
   }
-  return r;
+  return messages;
+}
+
+function main() {
+  
+  var settings = getUserSettings();
+  var file = downloadFile();
+  
+  if (!file) {
+    errorEmail(settings);
+    return 0;
+  }
+  
+  var days = [{name: "вс", active: false}, 
+              {name: "пн", active: true},
+              {name: "вт", active: true},
+              {name: "ср", active: true},
+              {name: "чт", active: true}, 
+              {name: "пт", active: false}, 
+              {name: "сб", active: false}
+             ];
+  var today = (new Date()).getDay(); // 0 = вс, 6 = сб
+  
+  var startNotification = getNotificationMessage(days[today].name); //можно передавать не все параметры
+  
+  if (!days[today].active) {
+    errors += "\nНельзя рассылать в этот день: " + days[today].name;
+    errorEmail (settings);
+    return 0;
+  }
+  
+  GmailApp.sendEmail(settings.robotEmail, 
+                     startNotification.mailing_start.header,
+                     startNotification.mailing_start.body,
+                     { name: settings.robotName, replyTo: adminEmail, attachments: [file]});
+  
+  var todaySheetName = days[today].name;
+  var recipientsData = ss.getSheetByName(todaySheetName).getDataRange().getValues();
+  var tableHeader = recipientsData[1];
+  var haveAllColumns = setColumns(tableHeader);
+  
+  if (!haveAllColumns) {
+    errorEmail(settings);
+    return 0;
+  }
+  
+  var subject = settings.subject;
+  if (subject.length < 10){
+    errors += "Тема письма слишком короткая.";
+    errorEmail(settings);
+    return 0;
+  }
+  
+  //isEmailsUnique();
+  
+  var dateSent = [];
+  var sentCount = 0;
+  
+  for (var i=2; i<recipientsData.length; i++) {
+    var row = recipientsData[i];
+    
+    var email = row[colPosition.email];
+    var template = row[colPosition.template];
+    var messageType = template.replace("Текст","");
+    var name = row[colPosition.recipientName];
+    //var company = row[colPosition.company];
+    log(row[colPosition.dateSent] + "ds");
+    var message = getMessageBody(name, messageType, settings);
+    
+    if ((!email)||(!message)) {
+      dateSent.push(["Не отправлено, " + new Date()]);
+      errors += "\nНе получилось отправить адресату из строки " + i + " на листе " + days[today].name;
+      continue;
+    }
+      
+    GmailApp.sendEmail(email, subject, message, {
+      name: settings.robotName,
+      replyTo: settings.robotEmail,
+      attachments: [file],
+    });
+    
+    dateSent.push([new Date()]);
+    sentCount++;
+  }
+  //success
+  ss.getSheetByName(todaySheetName).getRange(3, colPosition.dateSent, recipientsData.length - 2, 1).setValues(dateSent);
+  
+  var successNotification = getNotificationMessage(days[today].name, sentCount, (recipientsData.length - 2 ));
+  
+  GmailApp.sendEmail(settings.robotEmail, 
+                     successNotification.mailing_end.header,
+                     successNotification.mailing_end.body,
+                     { name: settings.robotName, replyTo: adminEmail});
 }
