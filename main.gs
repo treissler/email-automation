@@ -189,7 +189,7 @@ function main() {
     sentCount++;
   }
   //success
-  ss.getSheetByName(todaySheetName).getRange(3, colPosition.dateSent, recipientsData.length - 2, 1).setValues(dateSent);
+  ss.getSheetByName(todaySheetName).getRange(3, colPosition.dateSent + 1, recipientsData.length - 2, 1).setValues(dateSent);
   
   var successNotification = getNotificationMessage(days[today].name, sentCount, (recipientsData.length - 2 ));
   
