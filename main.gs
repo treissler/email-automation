@@ -22,8 +22,9 @@ function downloadFile () {
   return file;
 }
 
-//TODO включить если сайт недоступен, запросить файл у менеджера
+//TODO если сервер с файлом не ответил
 function  getFile () {
+  //сначала новые, по умолчанию
   var files = DriveApp.getFoldersByName(fileFolderName).next().getFiles();
   
   if(files.hasNext()) { 
@@ -46,7 +47,7 @@ function setColumns(tableHeader){
   
   for (var i=0; i<tableHeader.length; i++){
     if (!colName[tableHeader[i]]){ 
-      errors += "\nПроверьте, что все нужные колонки есть на листе: " + Object.keys(colName);
+      errors += "\nПроверьте, что все колонки есть на листе: " + Object.keys(colName);
       return false;
     }
     colPosition[colName[tableHeader[i]]] = i;
@@ -76,7 +77,7 @@ function getUserSettings () {
   return fields;
 }
 
-function getMessageBody (recipientName, messageType, settings) {  log(recipientName + "name");
+function getMessageBody (recipientName, messageType, settings) {
   if (!recipientName) { 
     recipientName = settings.defaultName; 
   }
@@ -113,6 +114,7 @@ function main() {
   var file = downloadFile();
   
   if (!file) {
+    errors += "\nНе удалось получить файл";
     errorEmail(settings);
     return 0;
   }
@@ -170,7 +172,6 @@ function main() {
     var messageType = template.replace("Текст","");
     var name = row[colPosition.recipientName];
     //var company = row[colPosition.company];
-    log(row[colPosition.dateSent] + "ds");
     var message = getMessageBody(name, messageType, settings);
     
     if ((!email)||(!message)) {
@@ -188,7 +189,7 @@ function main() {
     dateSent.push([new Date()]);
     sentCount++;
   }
-  //success
+  //Фиксация результата
   ss.getSheetByName(todaySheetName).getRange(3, colPosition.dateSent + 1, recipientsData.length - 2, 1).setValues(dateSent);
   
   var successNotification = getNotificationMessage(days[today].name, sentCount, (recipientsData.length - 2 ));
