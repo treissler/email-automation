@@ -16,10 +16,14 @@ function downloadFile () {
     return null; 
   }
   
-  var file = UrlFetchApp.fetch(filePageUrl + fileName).getBlob();
-  errors += "\nФайл успешно загружен.";
-  
-  return file;
+  try{
+    var file = UrlFetchApp.fetch(filePageUrl + fileName).getBlob();
+    errors += "\nФайл успешно загружен.";
+    return file;
+  } catch (e) {
+    errors += "\nФайл не найден по URL" + (filePageUrl + fileName); 
+    return null; 
+  }
 }
 
 //TODO если сервер с файлом не ответил
@@ -81,7 +85,11 @@ function getMessageBody (recipientName, messageType, settings) {
   if (!recipientName) { 
     recipientName = settings.defaultName; 
   }
-  return recipientName + settings["template" + messageType] + settings.footer;
+  
+  if (settings["template" + messageType] != undefined)
+    return recipientName + settings["template" + messageType] + settings.footer;
+  else
+    return null;
 }
 
 function getNotificationMessage(todaySheetName, sentCount, recipientsCount) {
@@ -169,14 +177,16 @@ function main() {
     
     var email = row[colPosition.email];
     var template = row[colPosition.template];
-    var messageType = template.replace("Текст","");
     var name = row[colPosition.recipientName];
-    //var company = row[colPosition.company];
-    var message = getMessageBody(name, messageType, settings);
+    var messageType = template.replace("Текст","");
+    var message = "";
+    
+    if (messageType)
+      message = getMessageBody(name, messageType, settings);
     
     if ((!email)||(!message)) {
       dateSent.push(["Не отправлено, " + new Date()]);
-      errors += "\nНе получилось отправить адресату из строки " + i + " на листе " + days[today].name;
+      errors += "\nНе получилось отправить адресату из строки " + (i+1) + " на листе " + days[today].name;
       continue;
     }
       
