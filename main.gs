@@ -1,4 +1,5 @@
-/* Работает 1 раз в день по внешнему триггеру на main(). Рассылается файл прайс-листа с сайта. */
+/* Email-automation: Рассылка 1 раз в день по внешнему триггеру на main(). 
+В письме есть текст по 2 шаблонам, прикреплены файл прайс-листа и необязательный файл из папки на гугл диске. */
 
 function downloadFile () {
   try{
@@ -34,7 +35,7 @@ function  getFile () {
   if(files.hasNext()) { 
     return files.next();
   } else { 
-    log("Ошибка: в папке на Диске не найден файл для рассылки."); 
+    errors += "\nВ папке на Диске нет файла для рассылки.";
     return null; 
   };
 }
@@ -120,12 +121,17 @@ function main() {
   
   var settings = getUserSettings();
   var file = downloadFile();
+  var file2 = getFile();
+  var files = [];
   
   if (!file) {
-    errors += "\nНе удалось получить файл";
     errorEmail(settings);
     return 0;
   }
+  files = [file];
+  
+  if (!file2)
+    files.push(file2);
   
   var days = [{name: "вс", active: false}, 
               {name: "пн", active: true},
@@ -148,7 +154,7 @@ function main() {
   GmailApp.sendEmail(settings.robotEmail, 
                      startNotification.mailing_start.header,
                      startNotification.mailing_start.body,
-                     { name: settings.robotName, replyTo: adminEmail, attachments: [file]});
+                     { name: settings.robotName, replyTo: adminEmail, attachments: files});
   
   var todaySheetName = days[today].name;
   var recipientsData = ss.getSheetByName(todaySheetName).getDataRange().getValues();
@@ -189,11 +195,11 @@ function main() {
       errors += "\nНе получилось отправить адресату из строки " + (i+1) + " на листе " + days[today].name;
       continue;
     }
-      
+    
     GmailApp.sendEmail(email, subject, message, {
       name: settings.robotName,
       replyTo: settings.robotEmail,
-      attachments: [file],
+      attachments: files,
     });
     
     dateSent.push([new Date()]);
