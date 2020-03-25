@@ -27,6 +27,11 @@ Google Suits имеет возможности по автоматизации �
 
 [Документация библиотеки Google Developers](https://developers.google.com/apps-script/reference/spreadsheet/spreadsheet "клянусь, она там была!")
 
+
+### Добавлено меню для ручного запуска:
+![Список рассылки](https://github.com/treissler/email-automation/blob/master/img/email-sender_user_menu.png)
+
+
 ### Список рассылки можно легко обновлять:
 ![Список рассылки](https://github.com/treissler/email-automation/blob/master/img/email-sender_mailing_list.png)
 
